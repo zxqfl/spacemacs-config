@@ -320,13 +320,21 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (defun buffer-after-point ()
   (buffer-substring (point) (point-max)))
 
-(defun invoke-acpl (before after)
+(defun invoke-acpl-word (before after)
   (let ((path "/home/zxqfl/code/acpl/target/release/acpl_server")
         (client "client")
         (complete-word "complete-word"))
     (if buffer-file-name
         (process-lines path client complete-word before after "-f" buffer-file-name)
       (process-lines path client complete-word before after))))
+
+(defun invoke-acpl-line (before line after)
+  (let ((path "/home/zxqfl/code/acpl/target/release/acpl_server")
+        (client "client")
+        (complete-line "complete-line"))
+    (if buffer-file-name
+        (call-process path nil t nil client complete-line before line after "-f" buffer-file-name)
+      (call-process path nil t nil client complete-line before line after))))
 
 (defun company-acpl-backend (command &optional arg &rest ignored)
   (interactive (list 'interactive))
@@ -343,6 +351,16 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (defun magit-status-config ()
   (local-set-key (kbd "C") 'magit-commit)
   (local-set-key (kbd "P") 'magit-push))
+
+(defun acpl-complete-line ()
+  (interactive)
+  (let ((start (line-beginning-position))
+        (end (line-end-position)))
+    (let ((before (buffer-substring (point-min) start))
+          (line-contents (buffer-substring start end))
+          (after (buffer-substring end (point-max))))
+      (delete-region start end)
+      (invoke-acpl-line before line-contents after))))
 
 (defun dotspacemacs/user-config ()
   "Configuration function for user code.
@@ -379,6 +397,7 @@ you should place your code here."
   (define-for-each-state (kbd "C-S-c") 'avy-copy-region)
   (define-for-each-state (kbd "C-S-r") 'counsel-projectile-rg)
   (define-for-each-state (kbd "C-S-v") 'helm-show-kill-ring)
+  (define-for-each-state (kbd "C-x") 'acpl-complete-line)
   (add-hook 'magit-mode-hook 'magit-status-config)
   (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'rust-mode) (spacemacs/indent-region-or-buffer))))
   (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'c++-mode) (spacemacs/indent-region-or-buffer))))
