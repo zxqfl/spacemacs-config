@@ -54,7 +54,7 @@ values."
      ;;        shell-default-position 'bottom)
      ;; spell-checking
      ;; syntax-checking
-     ;; version-control
+     version-control
      )
    ;; List of additional packages that will be installed without being
    ;; wrapped in a layer. If you need some configuration for these
@@ -320,28 +320,28 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (defun buffer-after-point ()
   (buffer-substring (point) (point-max)))
 
+(setq acpl-path "/home/zxqfl/code/acpl/target/release/acpl_server")
+
 (defun invoke-acpl-word (before after)
-  (let ((path "/home/zxqfl/code/acpl/target/release/acpl_server")
-        (client "client")
+  (let ((client "client")
         (complete-word "complete-word"))
     (if buffer-file-name
-        (process-lines path client complete-word before after "-f" buffer-file-name)
-      (process-lines path client complete-word before after))))
+        (process-lines acpl-path client complete-word before after "-f" buffer-file-name)
+      (process-lines acpl-path client complete-word before after))))
 
 (defun invoke-acpl-line (before line after)
-  (let ((path "/home/zxqfl/code/acpl/target/release/acpl_server")
-        (client "client")
+  (let ((client "client")
         (complete-line "complete-line"))
     (if buffer-file-name
-        (call-process path nil t nil client complete-line before line after "-f" buffer-file-name)
-      (call-process path nil t nil client complete-line before line after))))
+        (call-process acpl-path nil t nil client complete-line before line after "-f" buffer-file-name)
+      (call-process acpl-path nil t nil client complete-line before line after))))
 
 (defun company-acpl-backend (command &optional arg &rest ignored)
   (interactive (list 'interactive))
   (cl-case command
     (interactive (company-begin-backend 'company-acpl-backend))
     (prefix (company-grab-word))
-    (candidates (invoke-acpl (buffer-until-point) (buffer-after-point)))
+    (candidates (invoke-acpl-word (buffer-until-point) (buffer-after-point)))
     (sorted "yes")))
 
 (defun acpl-mode ()
@@ -350,7 +350,7 @@ before packages are loaded. If you are unsure, you should try in setting them in
 
 (defun magit-status-config ()
   (local-set-key (kbd "C") 'magit-commit)
-  (local-set-key (kbd "P") 'magit-push))
+  (local-set-key (kbd "P") 'magit-push-to-remote))
 
 (defun acpl-complete-line ()
   (interactive)
@@ -423,7 +423,7 @@ you should place your code here."
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (web-beautify livid-mode skewer-mode simple-httpd json-mode json-snatcher json-reformat js2-refactor multiple-cursors js2-mode js-doc company-tern tern coffee-mode mmm-mode markdown-toc markdown-mode gh-md yaml-mode yapfify pyvenv pytest pyenv-mode py-isort pip-requirements live-py-mode hy-mode dash-functional cython-mode company-anaconda anaconda-mode pythonic disaster company-c-headers cmake-mode clang-format beacon seq nav-flash smeargle orgit magit-gitflow gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link evil-magit magit magit-popup git-commit ghub with-editor flycheck-ycmd flycheck company-ycmd ycmd request-deferred let-alist deferred fuzzy company-statistics company auto-yasnippet yasnippet ac-ispell auto-complete toml-mode racer pos-tip cargo rust-mode ws-butler winum which-key wgrep volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline smex restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint ivy-hydra indent-guide hydra hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-make helm helm-core google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu highlight elisp-slime-nav dumb-jump popup f dash s diminish define-word counsel-projectile projectile pkg-info epl counsel swiper ivy column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed async aggressive-indent adaptive-wrap ace-window ace-link avy))))
+    (git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter diff-hl web-beautify livid-mode skewer-mode simple-httpd json-mode json-snatcher json-reformat js2-refactor multiple-cursors js2-mode js-doc company-tern tern coffee-mode mmm-mode markdown-toc markdown-mode gh-md yaml-mode yapfify pyvenv pytest pyenv-mode py-isort pip-requirements live-py-mode hy-mode dash-functional cython-mode company-anaconda anaconda-mode pythonic disaster company-c-headers cmake-mode clang-format beacon seq nav-flash smeargle orgit magit-gitflow gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link evil-magit magit magit-popup git-commit ghub with-editor flycheck-ycmd flycheck company-ycmd ycmd request-deferred let-alist deferred fuzzy company-statistics company auto-yasnippet yasnippet ac-ispell auto-complete toml-mode racer pos-tip cargo rust-mode ws-butler winum which-key wgrep volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline smex restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint ivy-hydra indent-guide hydra hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-make helm helm-core google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu highlight elisp-slime-nav dumb-jump popup f dash s diminish define-word counsel-projectile projectile pkg-info epl counsel swiper ivy column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed async aggressive-indent adaptive-wrap ace-window ace-link avy))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
