@@ -325,22 +325,33 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (require 'json)
 
 (setq acpl--path "/home/zxqfl/code/acpl/target/release/acpl")
-(setq acpl--log-path "/home/zxqfl/acpl-emacs.log")
 
 (setq acpl--receive-output
       (lambda (process output)
         (setq acpl--output output)))
 
-(setq acpl--process
-      (make-process
-       :name "acpl"
-       :command `(,acpl--path
-                  "--log-file-path"
-                  ,acpl--log-path)
-       :stderr (generate-new-buffer "acpl-stderr")
-       :filter acpl--receive-output
-       :coding 'utf-8
-       :connection-type 'pipe))
+(defun acpl--setup ()
+  (unless (and (boundp 'acpl--process) acpl--process)
+    (setq acpl--stderr (make-pipe-process :name "acpl-stderr"))
+    (setq acpl--process
+          (make-process
+           :name "acpl"
+           :command `(,acpl--path)
+           :filter acpl--receive-output
+           :coding 'utf-8
+           :stderr acpl--stderr
+           :connection-type 'pipe))
+    (set-process-query-on-exit-flag acpl--process nil)
+    (set-process-query-on-exit-flag acpl--stderr nil)))
+
+(acpl--setup)
+
+(defun acpl-restart ()
+  (interactive)
+  (delete-process acpl--process)
+  (delete-process acpl--stderr)
+  (setq acpl--process nil)
+  (acpl--setup))
 
 (defun acpl--request (request)
   (let ((request-string (concat (json-encode request) "\n"))
@@ -463,15 +474,10 @@ you should place your code here."
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (company-auctex auctex-latexmk auctex git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter diff-hl web-beautify livid-mode skewer-mode simple-httpd json-mode json-snatcher json-reformat js2-refactor multiple-cursors js2-mode js-doc company-tern tern coffee-mode mmm-mode markdown-toc markdown-mode gh-md yaml-mode yapfify pyvenv pytest pyenv-mode py-isort pip-requirements live-py-mode hy-mode dash-functional cython-mode company-anaconda anaconda-mode pythonic disaster company-c-headers cmake-mode clang-format beacon seq nav-flash smeargle orgit magit-gitflow gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link evil-magit magit magit-popup git-commit ghub with-editor flycheck-ycmd flycheck company-ycmd ycmd request-deferred let-alist deferred fuzzy company-statistics company auto-yasnippet yasnippet ac-ispell auto-complete toml-mode racer pos-tip cargo rust-mode ws-butler winum which-key wgrep volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline smex restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint ivy-hydra indent-guide hydra hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-make helm helm-core google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu highlight elisp-slime-nav dumb-jump popup f dash s diminish define-word counsel-projectile projectile pkg-info epl counsel swiper ivy column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed async aggressive-indent adaptive-wrap ace-window ace-link avy))))
+    (helm-themes helm-swoop helm-projectile helm-mode-manager helm-flx helm-descbinds helm-ag ace-jump-helm-line yapfify yaml-mode ws-butler winum which-key wgrep web-beautify volatile-highlights vi-tilde-fringe uuidgen use-package toml-mode toc-org spaceline smex smeargle restart-emacs request rainbow-delimiters racer pyvenv pytest pyenv-mode py-isort popwin pip-requirements persp-mode pcre2el paradox orgit org-bullets open-junk-file neotree move-text mmm-mode markdown-toc magit-gitflow macrostep lorem-ipsum livid-mode live-py-mode linum-relative link-hint json-mode js2-refactor js-doc ivy-hydra indent-guide hy-mode hungry-delete hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-make google-translate golden-ratio gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy flx-ido fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-args evil-anzu eval-sexp-fu elisp-slime-nav dumb-jump disaster diminish diff-hl define-word cython-mode counsel-projectile company-tern company-statistics company-c-headers company-auctex company-anaconda column-enforce-mode coffee-mode cmake-mode clean-aindent-mode clang-format cargo beacon auto-yasnippet auto-highlight-symbol auto-compile auctex-latexmk aggressive-indent adaptive-wrap ace-window ace-link ac-ispell))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(evil-goggles-delete-face ((t (:inherit diff-removed))))
- '(evil-goggles-paste-face ((t (:inherit diff-added))))
- '(evil-goggles-undo-redo-add-face ((t (:inherit diff-added))))
- '(evil-goggles-undo-redo-change-face ((t (:inherit diff-changed))))
- '(evil-goggles-undo-redo-remove-face ((t (:inherit diff-removed))))
- '(evil-goggles-yank-face ((t (:inherit diff-changed)))))
+ )
