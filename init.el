@@ -55,6 +55,7 @@ values."
      ;; spell-checking
      ;; syntax-checking
      version-control
+     latex
      )
    ;; List of additional packages that will be installed without being
    ;; wrapped in a layer. If you need some configuration for these
@@ -132,14 +133,14 @@ values."
    ;; List of themes, the first of the list is loaded when spacemacs starts.
    ;; Press <SPC> T n to cycle to the next theme in the list (works great
    ;; with 2 themes variants, one dark and one light)
-   dotspacemacs-themes '(tsdh-light
-                         tsdh-dark)
+   dotspacemacs-themes '(tsdh-dark
+                         tsdh-light)
    ;; If non nil the cursor color matches the state color in GUI Emacs.
    dotspacemacs-colorize-cursor-according-to-state t
    ;; Default font, or prioritized list of fonts. `powerline-scale' allows to
    ;; quickly tweak the mode-line size to make separators look not too crappy.
    dotspacemacs-default-font '("Source Code Pro"
-                               :size 32
+                               :size 20
                                :weight normal
                                :width normal
                                :powerline-scale 1.1)
@@ -312,36 +313,70 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (defun fancy-save ()
   (interactive)
   (save-buffer)
-  (when (derived-mode-p 'rust-mode) (cargo-process-test))
-  (when (derived-mode-p 'c++-mode) (recompile)))
+  (when (derived-mode-p 'rust-mode) (cargo-process-check))
+  (when (derived-mode-p 'c++-mode) (recompile))
+  (when (derived-mode-p 'latex-mode) (TeX-command-run-all nil)))
 
 (defun buffer-until-point ()
   (buffer-substring (point-min) (point)))
 (defun buffer-after-point ()
   (buffer-substring (point) (point-max)))
 
-(setq acpl-path "/home/zxqfl/code/acpl/target/release/acpl_server")
+(require 'json)
 
-(defun invoke-acpl-word (before after)
-  (let ((client "client")
-        (complete-word "complete-word"))
-    (if buffer-file-name
-        (process-lines acpl-path client complete-word before after "-f" buffer-file-name)
-      (process-lines acpl-path client complete-word before after))))
+(setq acpl--path "/home/zxqfl/code/acpl/target/release/acpl")
+(setq acpl--log-path "/home/zxqfl/acpl-emacs.log")
 
-(defun invoke-acpl-line (before line after)
-  (let ((client "client")
-        (complete-line "complete-line"))
-    (if buffer-file-name
-        (call-process acpl-path nil t nil client complete-line before line after "-f" buffer-file-name)
-      (call-process acpl-path nil t nil client complete-line before line after))))
+(setq acpl--receive-output
+      (lambda (process output)
+        (setq acpl--output output)))
+
+(setq acpl--process
+      (make-process
+       :name "acpl"
+       :command `(,acpl--path
+                  "--log-file-path"
+                  ,acpl--log-path)
+       :stderr (generate-new-buffer "acpl-stderr")
+       :filter acpl--receive-output
+       :coding 'utf-8
+       :connection-type 'pipe))
+
+(defun acpl--request (request)
+  (let ((request-string (concat (json-encode request) "\n"))
+        (mark-begin (process-mark acpl--process)))
+    (process-send-string acpl--process request-string)
+    (accept-process-output acpl--process 1)
+    (let ((decoded (json-read-from-string acpl--output)))
+      (append decoded nil))))
+
+(defun acpl--autocomplete (before after)
+  (acpl--request
+   `(:Autocomplete (:before ,before
+                            :after ,after
+                            :filename ,buffer-file-name))))
+
+(setq old-buffer-file-name nil)
+
+(defun acpl--prefetch ()
+  (when (and buffer-file-name (not (equal buffer-file-name old-buffer-file-name)))
+    (setq old-buffer-file-name buffer-file-name)
+    (acpl--request
+     `(:Prefetch (:filename ,buffer-file-name)))))
+
+(defun acpl--complete-whole-line (before line after)
+  (acpl--request
+   `(:CompleteWholeLine (:before ,before
+                                 :line ,line
+                                 :after ,after
+                                 :filename ,buffer-file-name))))
 
 (defun company-acpl-backend (command &optional arg &rest ignored)
   (interactive (list 'interactive))
   (cl-case command
     (interactive (company-begin-backend 'company-acpl-backend))
     (prefix (company-grab-word))
-    (candidates (invoke-acpl-word (buffer-until-point) (buffer-after-point)))
+    (candidates (acpl--autocomplete (buffer-until-point) (buffer-after-point)))
     (sorted "yes")))
 
 (defun acpl-mode ()
@@ -360,7 +395,7 @@ before packages are loaded. If you are unsure, you should try in setting them in
           (line-contents (buffer-substring start end))
           (after (buffer-substring end (point-max))))
       (delete-region start end)
-      (invoke-acpl-line before line-contents after))))
+      (acpl--complete-whole-line before line-contents after))))
 
 (defun dotspacemacs/user-config ()
   "Configuration function for user code.
@@ -372,13 +407,18 @@ you should place your code here."
   (global-evil-mc-mode 1)
   (beacon-mode 1)
   (add-hook 'after-init-hook 'global-company-mode)
-  (set-variable 'company-backends '(company-acpl-backend))
+  ;; (set-variable 'company-backends '(company-acpl-backend))
   (set-variable 'company-backends-rust-mode '(company-acpl-backend))
+  (set-variable 'company-backends-LaTeX-mode '(company-acpl-backend))
   (add-hook 'prog-mode-hook #'(lambda () (modify-syntax-entry ?_ "w")))
   (add-hook 'c++-mode-hook 'acpl-mode)
+  (add-hook 'post-command-hook 'acpl--prefetch)
+  (setq TeX-view-program-list '(("Evince" "evince --page-index=%(outpage) %o")))
+  (setq TeX-view-evince-keep-focus t)
   (setq company-idle-delay 0)
   (setq company-minimum-prefix-length 1)
   (setq company-transformers nil)
+  (setq cargo-process--command-test "test --release")
   (setq avy-keys '(?s ?d ?f ?g ?h ?j ?k ?l ?a ?y ?t ?b ?r ?u ?v ?n ?e ?i ?c ?m ?o ?w ?p ?q ?x ?z))
   (define-key evil-normal-state-map (kbd "<escape>") 'evil-mc-undo-all-cursors)
   (define-key evil-insert-state-map (kbd "C-<return>") 'with-editor-finish)
@@ -423,7 +463,7 @@ you should place your code here."
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter diff-hl web-beautify livid-mode skewer-mode simple-httpd json-mode json-snatcher json-reformat js2-refactor multiple-cursors js2-mode js-doc company-tern tern coffee-mode mmm-mode markdown-toc markdown-mode gh-md yaml-mode yapfify pyvenv pytest pyenv-mode py-isort pip-requirements live-py-mode hy-mode dash-functional cython-mode company-anaconda anaconda-mode pythonic disaster company-c-headers cmake-mode clang-format beacon seq nav-flash smeargle orgit magit-gitflow gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link evil-magit magit magit-popup git-commit ghub with-editor flycheck-ycmd flycheck company-ycmd ycmd request-deferred let-alist deferred fuzzy company-statistics company auto-yasnippet yasnippet ac-ispell auto-complete toml-mode racer pos-tip cargo rust-mode ws-butler winum which-key wgrep volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline smex restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint ivy-hydra indent-guide hydra hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-make helm helm-core google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu highlight elisp-slime-nav dumb-jump popup f dash s diminish define-word counsel-projectile projectile pkg-info epl counsel swiper ivy column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed async aggressive-indent adaptive-wrap ace-window ace-link avy))))
+    (company-auctex auctex-latexmk auctex git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter diff-hl web-beautify livid-mode skewer-mode simple-httpd json-mode json-snatcher json-reformat js2-refactor multiple-cursors js2-mode js-doc company-tern tern coffee-mode mmm-mode markdown-toc markdown-mode gh-md yaml-mode yapfify pyvenv pytest pyenv-mode py-isort pip-requirements live-py-mode hy-mode dash-functional cython-mode company-anaconda anaconda-mode pythonic disaster company-c-headers cmake-mode clang-format beacon seq nav-flash smeargle orgit magit-gitflow gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link evil-magit magit magit-popup git-commit ghub with-editor flycheck-ycmd flycheck company-ycmd ycmd request-deferred let-alist deferred fuzzy company-statistics company auto-yasnippet yasnippet ac-ispell auto-complete toml-mode racer pos-tip cargo rust-mode ws-butler winum which-key wgrep volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline smex restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint ivy-hydra indent-guide hydra hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-make helm helm-core google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu highlight elisp-slime-nav dumb-jump popup f dash s diminish define-word counsel-projectile projectile pkg-info epl counsel swiper ivy column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed async aggressive-indent adaptive-wrap ace-window ace-link avy))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
