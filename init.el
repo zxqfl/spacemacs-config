@@ -354,18 +354,18 @@ before packages are loaded. If you are unsure, you should try in setting them in
   (acpl--setup))
 
 (defun acpl--request (request)
-  (let ((request-string (concat (json-encode request) "\n"))
-        (mark-begin (process-mark acpl--process)))
+  (let ((request-string (concat (json-encode request) "\n")))
     (process-send-string acpl--process request-string)
     (accept-process-output acpl--process 1)
-    (let ((decoded (json-read-from-string acpl--output)))
-      (append decoded nil))))
+    (json-read-from-string acpl--output)))
 
 (defun acpl--autocomplete (before after)
-  (acpl--request
-   `(:Autocomplete (:before ,before
-                            :after ,after
-                            :filename ,buffer-file-name))))
+  (let ((request-result
+         (acpl--request
+          `(:Autocomplete (:before ,before
+                                   :after ,after
+                                   :filename ,buffer-file-name)))))
+    (append request-result nil)))
 
 (setq old-buffer-file-name nil)
 
@@ -406,7 +406,7 @@ before packages are loaded. If you are unsure, you should try in setting them in
           (line-contents (buffer-substring start end))
           (after (buffer-substring end (point-max))))
       (delete-region start end)
-      (acpl--complete-whole-line before line-contents after))))
+      (insert (acpl--complete-whole-line before line-contents after)))))
 
 (defun dotspacemacs/user-config ()
   "Configuration function for user code.
