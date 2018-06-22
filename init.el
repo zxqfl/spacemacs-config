@@ -31,6 +31,7 @@ values."
    ;; List of configuration layers to load.
    dotspacemacs-configuration-layers
    '(
+     html
      javascript
      markdown
      yaml
@@ -49,9 +50,9 @@ values."
      git
      ;; markdown
      ;; org
-     ;; (shell :variables
-     ;;        shell-default-height 30
-     ;;        shell-default-position 'bottom)
+     (shell :variables
+            shell-default-height 30
+            shell-default-position 'bottom)
      ;; spell-checking
      ;; syntax-checking
      version-control
@@ -315,16 +316,20 @@ before packages are loaded. If you are unsure, you should try in setting them in
   (save-buffer)
   (when (derived-mode-p 'rust-mode) (cargo-process-check))
   (when (derived-mode-p 'c++-mode) (recompile))
+  (when (derived-mode-p 'java-mode) (recompile))
   (when (derived-mode-p 'latex-mode) (TeX-command-run-all nil)))
 
+(setq acpl--max-dist 2500)
+
 (defun buffer-until-point ()
-  (buffer-substring (point-min) (point)))
+  (buffer-substring (max (point-min) (- (point) acpl--max-dist)) (point)))
 (defun buffer-after-point ()
-  (buffer-substring (point) (point-max)))
+  (buffer-substring (point) (min (point-max) (+ (point) acpl--max-dist))))
 
 (require 'json)
 
 (setq acpl--path "/home/zxqfl/code/acpl/target/release/acpl")
+(setq acpl--version "0.1.0")
 
 (setq acpl--receive-output
       (lambda (process output)
@@ -354,10 +359,12 @@ before packages are loaded. If you are unsure, you should try in setting them in
   (acpl--setup))
 
 (defun acpl--request (request)
-  (let ((request-string (concat (json-encode request) "\n")))
-    (process-send-string acpl--process request-string)
-    (accept-process-output acpl--process 1)
-    (json-read-from-string acpl--output)))
+  (let ((request `(:version ,acpl--version
+                            :request ,request)))
+    (let ((request-string (concat (json-encode request) "\n")))
+      (process-send-string acpl--process request-string)
+      (accept-process-output acpl--process 1)
+      (json-read-from-string acpl--output))))
 
 (defun acpl--autocomplete (before after)
   (let ((request-result
@@ -408,6 +415,10 @@ before packages are loaded. If you are unsure, you should try in setting them in
       (delete-region start end)
       (insert (acpl--complete-whole-line before line-contents after)))))
 
+(defun indent-if-small-enough ()
+  (when (< (buffer-size 5000))
+    (spacemacs/indent-region-or-buffer)))
+
 (defun dotspacemacs/user-config ()
   "Configuration function for user code.
 This function is called at the very end of Spacemacs initialization after
@@ -421,15 +432,24 @@ you should place your code here."
   ;; (set-variable 'company-backends '(company-acpl-backend))
   (set-variable 'company-backends-rust-mode '(company-acpl-backend))
   (set-variable 'company-backends-LaTeX-mode '(company-acpl-backend))
+  (set-variable 'company-backends-python-mode '(company-acpl-backend))
   (add-hook 'prog-mode-hook #'(lambda () (modify-syntax-entry ?_ "w")))
   (add-hook 'c++-mode-hook 'acpl-mode)
+  (add-hook 'java-mode-hook 'acpl-mode)
+  (add-hook 'markdown-mode-hook 'acpl-mode)
   (add-hook 'post-command-hook 'acpl--prefetch)
+  (add-hook 'LaTeX-mode-hook
+            (lambda ()
+              (LaTeX-add-environments "align*")))
   (setq TeX-view-program-list '(("Evince" "evince --page-index=%(outpage) %o")))
   (setq TeX-view-evince-keep-focus t)
   (setq company-idle-delay 0)
   (setq company-minimum-prefix-length 1)
   (setq company-transformers nil)
   (setq cargo-process--command-test "test --release")
+  (setq-default evil-escape-key-sequence nil)
+  (define-key evil-normal-state-map (kbd "j") 'evil-next-visual-line)
+  (define-key evil-normal-state-map (kbd "k") 'evil-previous-visual-line)
   (setq avy-keys '(?s ?d ?f ?g ?h ?j ?k ?l ?a ?y ?t ?b ?r ?u ?v ?n ?e ?i ?c ?m ?o ?w ?p ?q ?x ?z))
   (define-key evil-normal-state-map (kbd "<escape>") 'evil-mc-undo-all-cursors)
   (define-key evil-insert-state-map (kbd "C-<return>") 'with-editor-finish)
@@ -450,8 +470,8 @@ you should place your code here."
   (define-for-each-state (kbd "C-S-v") 'helm-show-kill-ring)
   (define-for-each-state (kbd "C-x") 'acpl-complete-line)
   (add-hook 'magit-mode-hook 'magit-status-config)
-  (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'rust-mode) (spacemacs/indent-region-or-buffer))))
-  (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'c++-mode) (spacemacs/indent-region-or-buffer))))
+  (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'rust-mode) (indent-if-small-enough))))
+  (add-hook 'before-save-hook (lambda () (when (derived-mode-p 'c++-mode) (indent-if-small-enough))))
   (define-key evil-normal-state-map (kbd "m") 'next-error)
   (evil-goggles-mode)
   (evil-goggles-use-diff-faces)
@@ -472,12 +492,20 @@ you should place your code here."
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
+ '(custom-safe-themes
+   (quote
+    ("bffa9739ce0752a37d9b1eee78fc00ba159748f50dc328af4be661484848e476" default)))
  '(package-selected-packages
    (quote
-    (helm-themes helm-swoop helm-projectile helm-mode-manager helm-flx helm-descbinds helm-ag ace-jump-helm-line yapfify yaml-mode ws-butler winum which-key wgrep web-beautify volatile-highlights vi-tilde-fringe uuidgen use-package toml-mode toc-org spaceline smex smeargle restart-emacs request rainbow-delimiters racer pyvenv pytest pyenv-mode py-isort popwin pip-requirements persp-mode pcre2el paradox orgit org-bullets open-junk-file neotree move-text mmm-mode markdown-toc magit-gitflow macrostep lorem-ipsum livid-mode live-py-mode linum-relative link-hint json-mode js2-refactor js-doc ivy-hydra indent-guide hy-mode hungry-delete hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-make google-translate golden-ratio gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy flx-ido fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-args evil-anzu eval-sexp-fu elisp-slime-nav dumb-jump disaster diminish diff-hl define-word cython-mode counsel-projectile company-tern company-statistics company-c-headers company-auctex company-anaconda column-enforce-mode coffee-mode cmake-mode clean-aindent-mode clang-format cargo beacon auto-yasnippet auto-highlight-symbol auto-compile auctex-latexmk aggressive-indent adaptive-wrap ace-window ace-link ac-ispell))))
+    (company-web web-mode tagedit slim-mode scss-mode sass-mode pug-mode haml-mode emmet-mode web-completion-data xterm-color shell-pop multi-term eshell-z eshell-prompt-extras esh-help helm-themes helm-swoop helm-projectile helm-mode-manager helm-flx helm-descbinds helm-ag ace-jump-helm-line yapfify yaml-mode ws-butler winum which-key wgrep web-beautify volatile-highlights vi-tilde-fringe uuidgen use-package toml-mode toc-org spaceline smex smeargle restart-emacs request rainbow-delimiters racer pyvenv pytest pyenv-mode py-isort popwin pip-requirements persp-mode pcre2el paradox orgit org-bullets open-junk-file neotree move-text mmm-mode markdown-toc magit-gitflow macrostep lorem-ipsum livid-mode live-py-mode linum-relative link-hint json-mode js2-refactor js-doc ivy-hydra indent-guide hy-mode hungry-delete hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-make google-translate golden-ratio gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy flx-ido fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-args evil-anzu eval-sexp-fu elisp-slime-nav dumb-jump disaster diminish diff-hl define-word cython-mode counsel-projectile company-tern company-statistics company-c-headers company-auctex company-anaconda column-enforce-mode coffee-mode cmake-mode clean-aindent-mode clang-format cargo beacon auto-yasnippet auto-highlight-symbol auto-compile auctex-latexmk aggressive-indent adaptive-wrap ace-window ace-link ac-ispell))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- )
+ '(evil-goggles-delete-face ((t (:inherit diff-removed))))
+ '(evil-goggles-paste-face ((t (:inherit diff-added))))
+ '(evil-goggles-undo-redo-add-face ((t (:inherit diff-added))))
+ '(evil-goggles-undo-redo-change-face ((t (:inherit diff-changed))))
+ '(evil-goggles-undo-redo-remove-face ((t (:inherit diff-removed))))
+ '(evil-goggles-yank-face ((t (:inherit diff-changed)))))
