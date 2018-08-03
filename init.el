@@ -31,6 +31,7 @@ values."
    ;; List of configuration layers to load.
    dotspacemacs-configuration-layers
    '(
+     graphviz
      html
      javascript
      markdown
@@ -134,8 +135,8 @@ values."
    ;; List of themes, the first of the list is loaded when spacemacs starts.
    ;; Press <SPC> T n to cycle to the next theme in the list (works great
    ;; with 2 themes variants, one dark and one light)
-   dotspacemacs-themes '(tsdh-dark
-                         tsdh-light)
+   dotspacemacs-themes '(spacemacs-dark
+                         spacemacs-light)
    ;; If non nil the cursor color matches the state color in GUI Emacs.
    dotspacemacs-colorize-cursor-according-to-state t
    ;; Default font, or prioritized list of fonts. `powerline-scale' allows to
@@ -315,8 +316,12 @@ before packages are loaded. If you are unsure, you should try in setting them in
   (interactive)
   (save-buffer)
   (when (derived-mode-p 'rust-mode) (cargo-process-check))
-  (when (derived-mode-p 'c++-mode) (recompile))
-  (when (derived-mode-p 'java-mode) (recompile))
+  (when
+      (or
+       (derived-mode-p 'c++-mode) 
+       (derived-mode-p 'java-mode)
+       (derived-mode-p 'python-mode))
+    (recompile))
   (when (derived-mode-p 'latex-mode) (TeX-command-run-all nil)))
 
 (setq acpl--max-dist 2500)
@@ -329,7 +334,7 @@ before packages are loaded. If you are unsure, you should try in setting them in
 (require 'json)
 
 (setq acpl--path "/home/zxqfl/code/acpl/target/release/acpl")
-(setq acpl--version "0.1.0")
+(setq acpl--version "0.2.0")
 
 (setq acpl--receive-output
       (lambda (process output)
@@ -349,6 +354,27 @@ before packages are loaded. If you are unsure, you should try in setting them in
     (set-process-query-on-exit-flag acpl--process nil)
     (set-process-query-on-exit-flag acpl--stderr nil)))
 
+(setq acpl--timer nil)
+
+(defun acpl--inform-buffer-state ()
+  (when acpl--timer (cancel-timer acpl--timer))
+  (setq
+   acpl--timer
+   (run-at-time
+    "5 sec"
+    nil
+    (lambda ()
+      (when (buffer-file-name)
+        (let ((acpl--max-dist 1000000)
+              (json-false "false"))
+          (acpl--request
+           `(:Inform (:filename ,buffer-file-name
+                                :before ,(buffer-until-point)
+                                :after ,(buffer-after-point)
+                                :editing ,json-false
+                                :region_includes_beginning t
+                                :region_includes_end t)))))))))
+
 (acpl--setup)
 
 (defun acpl-restart ()
@@ -366,13 +392,20 @@ before packages are loaded. If you are unsure, you should try in setting them in
       (accept-process-output acpl--process 1)
       (json-read-from-string acpl--output))))
 
-(defun acpl--autocomplete (before after)
-  (let ((request-result
-         (acpl--request
-          `(:Autocomplete (:before ,before
-                                   :after ,after
-                                   :filename ,buffer-file-name)))))
-    (append request-result nil)))
+(defun to-json-bool (x)
+  (if x json-true json-false))
+
+(defun acpl--autocomplete (before after includes-beginning includes-end)
+  (let ((json-true t)
+        (json-false "false"))
+    (let ((request-result
+           (acpl--request
+            `(:Autocomplete (:before ,before
+                                     :after ,after
+                                     :filename ,buffer-file-name
+                                     :region_includes_beginning ,(to-json-bool includes-beginning)
+                                     :region_includes_end ,(to-json-bool includes-end))))))
+      (append request-result nil))))
 
 (setq old-buffer-file-name nil)
 
@@ -394,7 +427,11 @@ before packages are loaded. If you are unsure, you should try in setting them in
   (cl-case command
     (interactive (company-begin-backend 'company-acpl-backend))
     (prefix (company-grab-word))
-    (candidates (acpl--autocomplete (buffer-until-point) (buffer-after-point)))
+    (candidates (acpl--autocomplete
+                 (buffer-until-point)
+                 (buffer-after-point)
+                 (>= (point-min) (- (point) acpl--max-dist))
+                 (<= (point-max) (+ (point) acpl--max-dist))))
     (sorted "yes")))
 
 (defun acpl-mode ()
@@ -429,6 +466,7 @@ you should place your code here."
   (global-evil-mc-mode 1)
   (beacon-mode 1)
   (add-hook 'after-init-hook 'global-company-mode)
+  (add-hook 'post-command-hook 'acpl--inform-buffer-state)
   ;; (set-variable 'company-backends '(company-acpl-backend))
   (set-variable 'company-backends-rust-mode '(company-acpl-backend))
   (set-variable 'company-backends-LaTeX-mode '(company-acpl-backend))
@@ -441,7 +479,11 @@ you should place your code here."
   (add-hook 'LaTeX-mode-hook
             (lambda ()
               (LaTeX-add-environments "align*")))
-  (setq TeX-view-program-list '(("Evince" "evince --page-index=%(outpage) %o")))
+  ;; (setq TeX-view-program-list '(("Evince" "evince --page-index=%(outpage) %o")))
+  (when (not (boundp 'TeX-view-program-selection))
+    (setq TeX-view-program-selection '()))
+  (add-to-list 'TeX-view-program-selection
+               '(output-pdf "Zathura"))
   (setq TeX-view-evince-keep-focus t)
   (setq company-idle-delay 0)
   (setq company-minimum-prefix-length 1)
@@ -497,12 +539,14 @@ you should place your code here."
     ("bffa9739ce0752a37d9b1eee78fc00ba159748f50dc328af4be661484848e476" default)))
  '(package-selected-packages
    (quote
-    (company-web web-mode tagedit slim-mode scss-mode sass-mode pug-mode haml-mode emmet-mode web-completion-data xterm-color shell-pop multi-term eshell-z eshell-prompt-extras esh-help helm-themes helm-swoop helm-projectile helm-mode-manager helm-flx helm-descbinds helm-ag ace-jump-helm-line yapfify yaml-mode ws-butler winum which-key wgrep web-beautify volatile-highlights vi-tilde-fringe uuidgen use-package toml-mode toc-org spaceline smex smeargle restart-emacs request rainbow-delimiters racer pyvenv pytest pyenv-mode py-isort popwin pip-requirements persp-mode pcre2el paradox orgit org-bullets open-junk-file neotree move-text mmm-mode markdown-toc magit-gitflow macrostep lorem-ipsum livid-mode live-py-mode linum-relative link-hint json-mode js2-refactor js-doc ivy-hydra indent-guide hy-mode hungry-delete hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-make google-translate golden-ratio gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy flx-ido fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-args evil-anzu eval-sexp-fu elisp-slime-nav dumb-jump disaster diminish diff-hl define-word cython-mode counsel-projectile company-tern company-statistics company-c-headers company-auctex company-anaconda column-enforce-mode coffee-mode cmake-mode clean-aindent-mode clang-format cargo beacon auto-yasnippet auto-highlight-symbol auto-compile auctex-latexmk aggressive-indent adaptive-wrap ace-window ace-link ac-ispell))))
+    (graphviz-dot-mode multiple-cursors helm helm-core projectile counsel swiper ivy bind-key anaconda-mode avy yasnippet company smartparens highlight evil skewer-mode js2-mode simple-httpd markdown-mode org-plus-contrib magit magit-popup git-commit ghub with-editor async hydra pythonic rust-mode s dash company-web web-mode tagedit slim-mode scss-mode sass-mode pug-mode haml-mode emmet-mode web-completion-data xterm-color shell-pop multi-term eshell-z eshell-prompt-extras esh-help helm-themes helm-swoop helm-projectile helm-mode-manager helm-flx helm-descbinds helm-ag ace-jump-helm-line yapfify yaml-mode ws-butler winum which-key wgrep web-beautify volatile-highlights vi-tilde-fringe uuidgen use-package toml-mode toc-org spaceline smex smeargle restart-emacs request rainbow-delimiters racer pyvenv pytest pyenv-mode py-isort popwin pip-requirements persp-mode pcre2el paradox orgit org-bullets open-junk-file neotree move-text mmm-mode markdown-toc magit-gitflow macrostep lorem-ipsum livid-mode live-py-mode linum-relative link-hint json-mode js2-refactor js-doc ivy-hydra indent-guide hy-mode hungry-delete hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-make google-translate golden-ratio gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy flx-ido fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-args evil-anzu eval-sexp-fu elisp-slime-nav dumb-jump disaster diminish diff-hl define-word cython-mode counsel-projectile company-tern company-statistics company-c-headers company-auctex company-anaconda column-enforce-mode coffee-mode cmake-mode clean-aindent-mode clang-format cargo beacon auto-yasnippet auto-highlight-symbol auto-compile auctex-latexmk aggressive-indent adaptive-wrap ace-window ace-link ac-ispell)))
+ '(safe-local-variable-values (quote ((TeX-command-extra-options . "-shell-escape")))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
+ '(evil-goggles-change-face ((t (:inherit diff-removed))))
  '(evil-goggles-delete-face ((t (:inherit diff-removed))))
  '(evil-goggles-paste-face ((t (:inherit diff-added))))
  '(evil-goggles-undo-redo-add-face ((t (:inherit diff-added))))
